@@ -1,0 +1,106 @@
+name: Validate static catalog feed
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate feed boundary
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          TARGET_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+
+          while IFS= read -r -d '' file; do
+            if [[ -L "$file" ]]; then
+              echo "Symbolic links are not permitted: $file" >&2
+              exit 1
+            fi
+
+            case "$file" in
+              .gitattributes|.nojekyll|README.md|index.html|.github/workflows/validate-feed.yml|stable/catalog-channel.json|stable/catalog-channel.sig)
+                ;;
+              catalogs/*/catalog-changes.json)
+                [[ "$file" =~ ^catalogs/[1-9][0-9]*/catalog-changes\.json$ ]] || {
+                  echo "Invalid catalog change-summary path: $file" >&2
+                  exit 1
+                }
+                ;;
+              catalogs/*/*.avwtcatalog)
+                [[ "$file" =~ ^catalogs/[1-9][0-9]*/AVWT-Catalog-[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?\.avwtcatalog$ ]] || {
+                  echo "Invalid immutable catalog path: $file" >&2
+                  exit 1
+                }
+                ;;
+              *)
+                echo "Unexpected distribution-repository file: $file" >&2
+                exit 1
+                ;;
+            esac
+          done < <(git ls-files -z)
+
+          if git grep -I -n -E -- 'BEGIN (EC |RSA |OPENSSH |)PRIVATE KEY|BEGIN PKCS12' -- . ':!README.md'; then
+            echo "Private-key material is forbidden." >&2
+            exit 1
+          fi
+
+          stable_count=0
+          [[ -f stable/catalog-channel.json ]] && stable_count=$((stable_count + 1))
+          [[ -f stable/catalog-channel.sig ]] && stable_count=$((stable_count + 1))
+          [[ "$stable_count" -eq 0 || "$stable_count" -eq 2 ]] || {
+            echo "Stable metadata and signature must be published together." >&2
+            exit 1
+          }
+
+          if [[ -d catalogs ]]; then
+            while IFS= read -r revision_dir; do
+              revision="${revision_dir##*/}"
+              [[ "$revision" =~ ^[1-9][0-9]*$ ]] || {
+                echo "Invalid revision directory: $revision_dir" >&2
+                exit 1
+              }
+              mapfile -t files < <(find "$revision_dir" -maxdepth 1 -type f -printf '%f\n' | sort)
+              [[ "${#files[@]}" -eq 2 ]] || {
+                echo "Revision $revision must contain exactly one catalog and one change summary." >&2
+                exit 1
+              }
+              [[ "${files[0]}" == AVWT-Catalog-*.avwtcatalog || "${files[1]}" == AVWT-Catalog-*.avwtcatalog ]] || {
+                echo "Revision $revision has no catalog bundle." >&2
+                exit 1
+              }
+              [[ "${files[0]}" == catalog-changes.json || "${files[1]}" == catalog-changes.json ]] || {
+                echo "Revision $revision has no change summary." >&2
+                exit 1
+              }
+            done < <(find catalogs -mindepth 1 -maxdepth 1 -type d | sort)
+          fi
+
+          if [[ -n "${BASE_SHA:-}" && "$BASE_SHA" != "0000000000000000000000000000000000000000" ]]; then
+            while IFS=$'\t' read -r status old_path new_path; do
+              path="${new_path:-$old_path}"
+              if [[ "$old_path" == catalogs/* || "$path" == catalogs/* ]]; then
+                [[ "$status" == A ]] || {
+                  echo "Committed catalog revisions are immutable: $status $old_path ${new_path:-}" >&2
+                  exit 1
+                }
+              fi
+            done < <(git diff --name-status "$BASE_SHA" "$TARGET_SHA")
+          fi
+
+          echo "STATIC_CATALOG_FEED_OK"

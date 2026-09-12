@@ -55,7 +55,7 @@ jobs:
             esac
           done < <(git ls-files -z)
 
-          if git grep -I -n -E -- 'BEGIN (EC |RSA |OPENSSH |)PRIVATE KEY|BEGIN PKCS12' -- . ':!README.md' ':!.github/workflows/validate-feed.yml'; then
+          if git grep -I -n -E -- 'BEGIN (EC |RSA |OPENSSH |)PRIVATE KEY|BEGIN PKCS12' -- . ':!.github/workflows/validate-feed.yml'; then
             echo "Private-key material is forbidden." >&2
             exit 1
           fi

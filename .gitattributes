@@ -1,1 +1,4 @@
 * text=auto eol=lf
+*.avwtcatalog -text
+*.sig -text
+stable/catalog-channel.json -text

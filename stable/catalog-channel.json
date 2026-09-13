@@ -1,0 +1,13 @@
+{
+  "CatalogId": "avwt-reference",
+  "SchemaVersion": 1,
+  "CatalogVersion": "2026.9.13.1",
+  "Revision": 1,
+  "PreviousRevision": 0,
+  "MinimumAppVersion": "1.1.1",
+  "CreatedUtc": "2026-09-13T05:19:53.2605102+00:00",
+  "ExpiresUtc": "2026-09-20T05:19:53.2605102+00:00",
+  "SigningKeyId": "avwt-catalog-2026-a",
+  "BundleUri": "https://11anthonym.github.io/AVWT-Catalog/catalogs/1/AVWT-Catalog-2026.9.13.1.avwtcatalog",
+  "BundleSha256": "9955F68A0575E0F209DA7198D107D4AD6FAF01F5FC8A67E6B73BEE404D05AFA0"
+}
